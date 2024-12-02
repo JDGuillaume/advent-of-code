@@ -1,35 +1,35 @@
-use std::{env::current_dir, fs::File, io::Read};
+use std::{
+    collections::HashMap,
+    env::current_dir,
+    fs::File,
+    io::{self, BufRead},
+};
 
-use regex::Regex;
+fn parse_lists(path: &str) -> (Vec<u32>, Vec<u32>, HashMap<u32, u32>) {
+    let mut list_1: Vec<u32> = Vec::new();
+    let mut list_2: Vec<u32> = Vec::new();
+    let mut similarities: HashMap<u32, u32> = HashMap::new();
 
-fn read_file_to_string(path: &str) -> String {
-    let mut file = File::open(path).unwrap();
-    let mut buffer = String::new();
-    file.read_to_string(&mut buffer).unwrap();
-    buffer
-}
+    let file =
+        File::open(path).unwrap_or_else(|_| panic!("Unable to read file at path ({}).", path));
+    let lines = io::BufReader::new(file).lines();
 
-fn parse_lists(buffer: &str) -> (Vec<u32>, Vec<u32>) {
-    let re = Regex::new(r"\d+").unwrap();
-    let results: Vec<u32> = re
-        .find_iter(buffer)
-        .map(|m| m.as_str().parse().unwrap())
-        .collect();
+    for line in lines {
+        let current_line = line.unwrap();
+        let values: Vec<u32> = current_line
+            .split("   ")
+            .map(|x| x.parse::<u32>().unwrap())
+            .collect();
 
-    let mut vec_1: Vec<u32> = Vec::new();
-    let mut vec_2: Vec<u32> = Vec::new();
-
-    for (index, result) in results.iter().enumerate() {
-        match index % 2 {
-            0 => vec_1.push(*result),
-            _ => vec_2.push(*result),
-        }
+        list_1.push(values[0]);
+        list_2.push(values[1]);
+        similarities.insert(values[0], 0);
     }
 
-    vec_1.sort();
-    vec_2.sort();
+    list_1.sort();
+    list_2.sort();
 
-    (vec_1, vec_2)
+    (list_1, list_2, similarities)
 }
 
 fn calculate_distance(list_1: &[u32], list_2: &[u32]) -> u32 {
@@ -43,12 +43,17 @@ fn calculate_distance(list_1: &[u32], list_2: &[u32]) -> u32 {
     distance
 }
 
-fn calculate_similarity(list_1: &[u32], list_2: &[u32]) -> u32 {
+fn calculate_similarity(mut similarities: HashMap<u32, u32>, list: &[u32]) -> u32 {
     let mut similarity = 0;
 
-    for location in list_1 {
-        let matches: Vec<&u32> = list_2.iter().filter(|x| **x == *location).collect();
-        similarity += location * matches.len() as u32;
+    for location in list {
+        if let Some(location_match) = similarities.get_mut(location) {
+            *location_match += 1;
+        }
+    }
+
+    for (k, v) in similarities.drain() {
+        similarity += k * v
     }
 
     similarity
@@ -56,17 +61,15 @@ fn calculate_similarity(list_1: &[u32], list_2: &[u32]) -> u32 {
 
 fn main() {
     let path = format!("{}/locations.txt", current_dir().unwrap().display());
-    let buffer = read_file_to_string(&path);
-
-    let (vec_1, vec_2) = parse_lists(&buffer);
+    let (list_1, list_2, similarities) = parse_lists(&path);
 
     println!(
         "The total distance observed between the two lists is: {}.",
-        calculate_distance(&vec_1, &vec_2)
+        calculate_distance(&list_1, &list_2)
     );
 
     println!(
         "The observed similarity between the two lists is: {}.",
-        calculate_similarity(&vec_1, &vec_2)
+        calculate_similarity(similarities, &list_2)
     );
 }
